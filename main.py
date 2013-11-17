@@ -4,15 +4,19 @@ import sys
 import time
 import os
 import ConfigParser
+import re
 
-def fetch(url):
+def fetch(url, TeamNum):
     html = urllib2.urlopen(url).read()
     table = PQ(html).find("#standings")[0]
     trs = PQ(table).find("tr")
     record = {}
-    record['TimeStamp'] = time.strftime('%H:%M:%S',time.localtime(time.time()));
-    record['Teams'] = {}
+    record['TimeStamp'] = re.findall("[0-9]{4}/[0-9]{2}/[0-9]{2} ([0-9]{2}:[0-9]{2}:[0-9]{2})", html)[0]
+    start = re.findall("[0-9]{4}-[0-9]{2}-[0-9]{2} ([0-9]{2}:[0-9]{2})", html)[0]
+    record['Teams'] = [None] * TeamNum
+    print record['TimeStamp']
     for tr in trs[1:-1]:
+        uid = int(re.findall("([0-9]+)", PQ(tr).find('a').attr('href'))[0])
         tds = PQ(tr).find("td")
         team = {}
         team['SchoolName'] = tds[1].text
@@ -23,7 +27,7 @@ def fetch(url):
         team['Problem'] = []
         for td in tds[6:]:
             team['Problem'].append(td.text)
-        record["Teams"][team['TeamName']] = team;
+        record["Teams"][uid] = team;
     return record
 
 
@@ -33,25 +37,27 @@ def utf8_wrapper(s):
     else:
         return s
 
-def compare(TeamsA, TeamsB, TimeStamp, ProblemCount):
+def compare(TeamsA, TeamsB, TimeStamp, TeamNum, ProblemCount):
     Status = []
-    for TeamName in TeamsA:
+    for uid in range(0, TeamNum):
         for i in range(0, ProblemCount):
-            #print TeamName, TeamsA[TeamName]
-            pre = TeamsA[TeamName]['Problem'][i]
-            cur = TeamsB[TeamName]['Problem'][i]
+            #print id, TeamsA[id]
+            pre = TeamsA[uid]['Problem'][i]
+            cur = TeamsB[uid]['Problem'][i]
+            Time = TimeStamp
             if pre <> cur:
                 pos = cur.find("/")
                 if pos == -1:
                     result = "Submit"
                 else:
                     result = "Accepted"
+                    #Time = cur.split("/")[1]
                 Status.append({'Time': TimeStamp,
-                               'Team': TeamName,
-                               'SchoolName' : TeamsA[TeamName]['SchoolName'],
+                               'Team': TeamsA[uid]['TeamName'],
+                               'SchoolName' : TeamsA[uid]['SchoolName'],
                                'Problem': chr(i + ord('A')),
                                'Result': result,
-                               'RankChange': pos <> -1 and TeamsA[TeamName]['TeamRank'] + " --> " + TeamsB[TeamName]['TeamRank'] or ""} )
+                               'RankChange': pos <> -1 and TeamsA[uid]['TeamRank'] + " --> " + TeamsB[uid]['TeamRank'] or ""} )
     return Status
 
 
@@ -59,21 +65,21 @@ def readConfig():
     config = ConfigParser.ConfigParser()
     config.read("config.ini")
     RankURL = config.get("Input", "RankURL")
+    TeamNum = int(config.get("Input", "TeamNum"))
     ProblemCount = int(config.get("Input", "ProblemCount"))
     Path = config.get("Output", "Path")
-    return RankURL, ProblemCount, Path
+    return RankURL, TeamNum, ProblemCount, Path
 
-RankURL, ProblemCount, Path = readConfig()
+RankURL, TeamNum, ProblemCount, Path = readConfig()
 
 tempPath = Path + ".temp"
 
-recA = fetch("http://localhost/test/aaa.html")
+recA = fetch("http://localhost/test/rank-test.htm", TeamNum)
 status = []
 while True:
-    time.sleep(1)
-    recB = fetch(RankURL)
-    status = compare(recA["Teams"], recB["Teams"], recB["TimeStamp"], ProblemCount) + status
-    f = open(tempPath, "w")
+    recB = fetch(RankURL, TeamNum)
+    status = compare(recA["Teams"], recB["Teams"], recB["TimeStamp"], TeamNum, ProblemCount)
+    f = open(tempPath, "w+")
     for s in status:
         text = ("<tr class='%s'><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>") % (s['Result'] == 'Accepted' and 'ac' or 'fail',
                                                                                                              s['Time'],
@@ -82,8 +88,11 @@ while True:
                                                                                                              s['Problem'],
                                                                                                              s['Result'],
                                                                                                              s['RankChange'])
-        print text
+        #print text
         f.write(utf8_wrapper(text))
     f.close()
+    recA = recB
+    os.system( ("type %s >> %s") % (Path, tempPath))
     os.system( ("copy %s %s") % (tempPath, Path))
-#    break
+    time.sleep(10)
+    break

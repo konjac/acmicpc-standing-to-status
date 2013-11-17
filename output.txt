@@ -1,8 +1,11 @@
 [Input]
 RankURL = http://board.acmicpc.info/icpc2013/hnu_onsite.php
 ProblemCount = 11
-TeamNum = 192
-StartTime = 09:00
+
+[Output]
+Path = E:\xampp\htdocs\test\output.html[Input]
+RankURL = http://board.acmicpc.info/icpc2013/hnu_onsite.php
+ProblemCount = 11
 
 [Output]
 Path = E:\xampp\htdocs\test\output.html
